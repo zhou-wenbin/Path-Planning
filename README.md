@@ -1,13 +1,6 @@
 # CarND-Path-Planning-Project
 Self-Driving Car Engineer Nanodegree Program
    
-### Simulator.
-You can download the Term3 Simulator which contains the Path Planning Project from the [releases tab (https://github.com/udacity/self-driving-car-sim/releases/tag/T3_v1.2).  
-
-To run the simulator on Mac/Linux, first make the binary file executable with the following command:
-```shell
-sudo chmod u+x {simulator_file_name}
-```
 
 ### Goals
 In this project your goal is to safely navigate around a virtual highway with other traffic that is driving +-10 MPH of the 50 MPH speed limit. You will be provided the car's localization and sensor fusion data, there is also a sparse map list of waypoints around the highway. The car should try to go as close as possible to the 50 MPH speed limit, which means passing slower traffic when possible, note that other cars will try to change lanes too. The car should avoid hitting other cars at all cost as well as driving inside of the marked road lanes at all times, unless going from one lane to another. The car should be able to make one complete loop around the 6946m highway. Since the car is trying to go 50 MPH, it should take a little over 5 minutes to complete 1 loop. Also the car should not experience total acceleration over 10 m/s^2 and jerk that is greater than 10 m/s^3.
@@ -65,12 +58,93 @@ the path has processed since last time.
 
 2. There will be some latency between the simulator running and the path planner returning a path, with optimized code usually its not very long maybe just 1-3 time steps. During this delay the simulator will continue using points that it was last given, because of this its a good idea to store the last points you have used so you can have a smooth transition. previous_path_x, and previous_path_y can be helpful for this transition since they show the last points given to the simulator controller with the processed points already removed. You would either return a path that extends this previous path or make sure to create a new path that has a smooth transition with this last path.
 
-## Tips
 
-A really helpful resource for doing this project and creating smooth trajectories was using http://kluge.in-chemnitz.de/opensource/spline/, the spline function is in a single hearder file is really easy to use.
 
 ---
 
+## How to generate the paths in details.
+In this section, I will explain how to generate paths in details. 
+
+* At first, we indentify which lane the car is currently now.
+
+```cpp
+// Obtain distance of car to the reference in the road according to sensor data.
+float d = sensor_fusion[i][6];
+
+// Identify the lane of the car in question
+int car_lane;
+if (d >= 0 && d < 4) {
+  car_lane = 0;
+} else if (d >= 4 && d < 8) {
+  car_lane = 1;
+} else if (d >= 8 && d <= 12) {
+  car_lane = 2;
+            } else { continue;}
+```
+
+* Next, define three basical dager signals for future path planning.
+
+##### Too Close situation.
+ 
+```cpp
+// Singnal for the situation where there is another car in front 
+// The distance between cars is less than 20
+int lane = 1;
+if (lane == car_lane)  {
+too_close |= (check_car_s > car_s) && ((check_car_s - car_s) < 30);
+} 
+```
+##### Car is to the right situation
+
+```cpp
+// detected car_lane is right next to the lane of the car 
+// and the distance is between 20miles behind and 30 miles ahead
+if (car_lane - lane == 1) 
+{car_right |= ((car_s - 20) < check_car_s) && ((car_s + 30) > check_car_s);
+        } 
+
+```
+##### Car is to the left situation
+
+```cpp
+// detected car_lane is left next to the lane of the car 
+// and the distance is between 20miles behind and 30 miles ahead
+if (lane - car_lane == 1) 
+        {car_left |= ((car_s - 20) < check_car_s) && ((car_s + 30) > check_car_s);
+				}
+```
+* Finally, according to the danger situation, the car_s is making a planning for the future.
+
+
+##### If the car is too close, do the following planning
+
+- if there no car to the right, and there is a lane on the right, change lane to right one.
+- if there no car to the left, and there is a lane on the left, change lane to right one.
+- If the above situation can not be satisfied, then slow down the speed of the car
+
+```cpp
+if (too_close)
+{
+if (!car_right && lane < 2 ) // no car to the right and there is a lane to go right
+{lane++;}
+else if (!car_left && lane > 0) // no car to the left and there is a lane to ghe left
+{lane--; }
+else
+{ref_vel -= .224;}
+}
+```
+##### If the car is not in lane 1, which is the center, them move back to the center
+```cpp
+else
+{if (lane !=1)
+{if ((lane == 2 && !car_left) || (lane == 0 && !car_right)) 
+  {lane = 1;}
+ ```
+ ##### If the car's speed is less than 50 miles, speed up to 50 miles.
+ ```cpp
+       if (ref_vel < 49.5)
+          { ref_vel += .224; }
+```
 ## Dependencies
 
 * cmake >= 3.5
@@ -91,55 +165,4 @@ A really helpful resource for doing this project and creating smooth trajectorie
     cd uWebSockets
     git checkout e94b6e1
     ```
-
-## Editor Settings
-
-We've purposefully kept editor configuration files out of this repo in order to
-keep it as simple and environment agnostic as possible. However, we recommend
-using the following settings:
-
-* indent using spaces
-* set tab width to 2 spaces (keeps the matrices in source code aligned)
-
-## Code Style
-
-Please (do your best to) stick to [Google's C++ style guide](https://google.github.io/styleguide/cppguide.html).
-
-## Project Instructions and Rubric
-
-Note: regardless of the changes you make, your project must be buildable using
-cmake and make!
-
-
-## Call for IDE Profiles Pull Requests
-
-Help your fellow students!
-
-We decided to create Makefiles with cmake to keep this project as platform
-agnostic as possible. Similarly, we omitted IDE profiles in order to ensure
-that students don't feel pressured to use one IDE or another.
-
-However! I'd love to help people get up and running with their IDEs of choice.
-If you've created a profile for an IDE that you think other students would
-appreciate, we'd love to have you add the requisite profile files and
-instructions to ide_profiles/. For example if you wanted to add a VS Code
-profile, you'd add:
-
-* /ide_profiles/vscode/.vscode
-* /ide_profiles/vscode/README.md
-
-The README should explain what the profile does, how to take advantage of it,
-and how to install it.
-
-Frankly, I've never been involved in a project with multiple IDE profiles
-before. I believe the best way to handle this would be to keep them out of the
-repo root to avoid clutter. My expectation is that most profiles will include
-instructions to copy files to a new location to get picked up by the IDE, but
-that's just a guess.
-
-One last note here: regardless of the IDE used, every submitted project must
-still be compilable with cmake and make./
-
-## How to write a README
-A well written README file can enhance your project and portfolio.  Develop your abilities to create professional README files by completing [this free course](https://www.udacity.com/course/writing-readmes--ud777).
 
